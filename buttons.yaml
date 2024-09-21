@@ -1,0 +1,33 @@
+# example buttons.yaml file.
+
+pages:
+  - name: first_page
+    buttons:
+      # index is a 0-based button index on the Stream Deck, left to right from
+      # top to bottom.
+      # For example:
+      # 0 1 2 3
+      # 4 5 6 7
+      - index: 1
+        image_path: D:\Pictures\Icons\some_image.png
+        command:
+          - D:\Programs\some_program.exe
+          - --some-arg=some-val
+      - index: 3
+        image_path: D:\Pictures\Icons\next_page.png
+        # Special command to set buttons to other page.
+        # Argument is the name of target page.
+        command:
+          - page
+          - second_page
+  - name: second_page
+    buttons:
+      - index: 0
+        image_path: D:\Pictures\Icons\prev_page.png
+        command:
+          - page
+          - first_page
+      - index: 6
+        image_path: D:\Pictures\Icons\other_image.png
+        command:
+          - C:\Users\myuser\bin\other_program.exe
