@@ -1,5 +1,6 @@
 # example buttons.yaml file.
 
+brightness: 20 # 0-100
 pages:
   - name: first_page
     buttons:

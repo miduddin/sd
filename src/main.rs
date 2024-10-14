@@ -11,9 +11,9 @@ fn main() -> Result<()> {
     let vid = u16::from_str_radix(&args.next().unwrap(), 16)?;
     let pid = u16::from_str_radix(&args.next().unwrap(), 16)?;
 
-    let pages = parse_pages()?;
-    let active_page = &pages[0];
-    let mut deck = init_streamdeck(vid, pid, &active_page)?;
+    let config = parse_config()?;
+    let active_page = &config.pages[0];
+    let mut deck = init_streamdeck(vid, pid, &active_page, config.brightness)?;
 
     loop {
         let buttons_vec = match deck.read_buttons(None) {
@@ -21,7 +21,7 @@ fn main() -> Result<()> {
             Err(error) => {
                 println!("Got error: {},", error);
                 sleep(Duration::from_secs(1));
-                deck = match init_streamdeck(vid, pid, &active_page) {
+                deck = match init_streamdeck(vid, pid, &active_page, config.brightness) {
                     Ok(deck) => deck,
                     _ => deck,
                 };
@@ -39,7 +39,11 @@ fn main() -> Result<()> {
         };
 
         if button.command[0].eq("page") {
-            if let Some(page) = pages.iter().find(|page| page.name == button.command[1]) {
+            if let Some(page) = config
+                .pages
+                .iter()
+                .find(|page| page.name == button.command[1])
+            {
                 reset_streamdeck(&mut deck, &page)?;
             }
         } else {
@@ -53,10 +57,10 @@ fn main() -> Result<()> {
     }
 }
 
-fn init_streamdeck(vid: u16, pid: u16, page: &Page) -> Result<StreamDeck> {
+fn init_streamdeck(vid: u16, pid: u16, page: &Page, brightness: u8) -> Result<StreamDeck> {
     let mut deck = StreamDeck::connect(vid, pid, None)?;
 
-    deck.set_brightness(20)?;
+    deck.set_brightness(brightness)?;
     reset_streamdeck(&mut deck, page)?;
 
     Ok(deck)
@@ -76,10 +80,10 @@ fn reset_streamdeck(deck: &mut StreamDeck, page: &Page) -> Result<()> {
     Ok(())
 }
 
-fn parse_pages() -> Result<Vec<Page>> {
+fn parse_config() -> Result<Config> {
     let file = OpenOptions::new().read(true).open("buttons.yaml")?;
-    let pages: Vec<Page> = serde_yml::from_reader(file)?;
-    Ok(pages)
+    let config: Config = serde_yml::from_reader(file)?;
+    Ok(config)
 }
 
 fn get_button_index(vec: Vec<u8>) -> Option<usize> {
@@ -98,6 +102,12 @@ struct Button {
 struct Page {
     name: String,
     buttons: Vec<Button>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Config {
+    brightness: u8,
+    pages: Vec<Page>,
 }
 
 impl Page {
