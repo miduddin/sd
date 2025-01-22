@@ -11,8 +11,8 @@ fn main() -> Result<()> {
     let vid = u16::from_str_radix(&args.next().unwrap(), 16)?;
     let pid = u16::from_str_radix(&args.next().unwrap(), 16)?;
 
-    let config = parse_config()?;
-    let active_page = &config.pages[0];
+    let mut config = parse_config()?;
+    let mut active_page = &config.pages[0];
     let mut deck = init_streamdeck(vid, pid, &active_page, config.brightness)?;
 
     loop {
@@ -38,21 +38,29 @@ fn main() -> Result<()> {
             None => continue,
         };
 
-        if button.command[0].eq("page") {
-            if let Some(page) = config
-                .pages
-                .iter()
-                .find(|page| page.name == button.command[1])
-            {
-                reset_streamdeck(&mut deck, &page)?;
+        match button.command[0].as_str() {
+            "page" => {
+                if let Some(page) = config
+                    .pages
+                    .iter()
+                    .find(|page| page.name == button.command[1])
+                {
+                    reset_streamdeck(&mut deck, &page)?;
+                }
             }
-        } else {
-            let mut command = Command::new(&button.command[0]);
-            command.args(&button.command[1..]);
-            if let Some(work_dir) = &button.work_dir {
-                command.current_dir(work_dir);
+            "reload" => {
+                config = parse_config()?;
+                active_page = &config.pages[0];
+                deck = init_streamdeck(vid, pid, &active_page, config.brightness)?;
             }
-            command.spawn()?;
+            cmd => {
+                let mut command = Command::new(cmd);
+                command.args(&button.command[1..]);
+                if let Some(work_dir) = &button.work_dir {
+                    command.current_dir(work_dir);
+                }
+                command.spawn()?;
+            }
         }
     }
 }

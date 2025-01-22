@@ -21,6 +21,11 @@ pages:
         command:
           - page
           - second_page
+      - index: 7
+        image_path: D:\Pictures\Icons\reload.png
+        # Special command to reload & apply buttons.yaml file.
+        command:
+          - reload
   - name: second_page
     buttons:
       - index: 0
