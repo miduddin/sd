@@ -2,38 +2,27 @@
 
 brightness: 20 # 0-100
 pages:
-  - name: first_page
-    buttons:
+  - buttons:
       # index is a 0-based button index on the Stream Deck, left to right from
       # top to bottom.
       # For example:
       # 0 1 2 3
       # 4 5 6 7
       - index: 1
-        image_path: D:\Pictures\Icons\some_image.png
-        command:
-          - D:\Programs\some_program.exe
-          - --some-arg=some-val
+        image_path: /home/users/icons/someprogram.png
+        command: [/usr/bin/someprogram, -some-arg]
       - index: 3
-        image_path: D:\Pictures\Icons\next_page.png
-        # Special command to set buttons to other page.
-        # Argument is the name of target page.
-        command:
-          - page
-          - second_page
+        image_path: /home/users/icons/next.png
+        # Special command to set buttons to next page.
+        command: [page, next]
       - index: 7
-        image_path: D:\Pictures\Icons\reload.png
+        image_path: /home/users/icons/reload.png
         # Special command to reload & apply buttons.yaml file.
-        command:
-          - reload
-  - name: second_page
-    buttons:
+        command: [reload]
+  - buttons:
       - index: 0
-        image_path: D:\Pictures\Icons\prev_page.png
-        command:
-          - page
-          - first_page
+        image_path: /home/users/icons/prev.png
+        command: [page, prev]
       - index: 6
-        image_path: D:\Pictures\Icons\other_image.png
-        command:
-          - C:\Users\myuser\bin\other_program.exe
+        image_path: /home/users/icons/someprogram.png
+        command: [/usr/bin/someprogram]
