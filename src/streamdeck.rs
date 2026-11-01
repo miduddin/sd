@@ -3,60 +3,64 @@ use anyhow::Result;
 use hidapi::HidApi;
 use hidapi::HidDevice;
 use serde::Deserialize;
-use serde::Serialize;
+use std::collections::HashMap;
 use std::fs;
+use std::fs::File;
 use std::process::Command;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
 
+#[derive(Deserialize)]
+struct Config {
+    brightness: u8,
+    pages: Vec<ConfigPage>,
+}
+
+#[derive(Deserialize)]
+struct ConfigPage {
+    buttons: Vec<ConfigButton>,
+}
+
+#[derive(Deserialize)]
+struct ConfigButton {
+    index: u8,
+    image_path: String,
+    command: Vec<String>,
+}
+
 pub struct StreamDeck {
     device: HidDevice,
-    config: Config,
     config_path: String,
+    pages: Vec<Page>,
     current_page: usize,
 }
 
-#[derive(Serialize, Deserialize)]
-struct Config {
-    brightness: u8,
-    pages: Vec<Page>,
-}
-
-#[derive(Serialize, Deserialize)]
 struct Page {
-    buttons: Vec<Button>,
+    buttons: HashMap<u8, Button>,
 }
 
-impl Page {
-    fn find_button(&self, index: u8) -> Option<&Button> {
-        self.buttons.iter().find(|button| button.index == index)
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
 struct Button {
-    index: u8,
-    image_path: Option<String>,
-    command: Vec<String>,
-    work_dir: Option<String>,
+    image_path: String,
+    action: Action,
+}
+
+enum Action {
+    PagePrev,
+    PageNext,
+    Reload,
+    Command(Vec<String>),
 }
 
 impl StreamDeck {
-    pub fn new(config_path: &str) -> Result<StreamDeck> {
-        let device = wait_for_device().context("error connecting to device")?;
-        device.set_blocking_mode(true)?;
-
-        let config = load_config(config_path).context("error reading config")?;
-        let deck = StreamDeck {
-            device,
-            config,
-            config_path: config_path.to_string(),
+    pub fn new(config_path: String) -> Result<StreamDeck> {
+        let mut deck = StreamDeck {
+            device: wait_for_device().context("error connecting to device")?,
+            config_path: config_path,
+            pages: vec![],
             current_page: 0,
         };
-
-        deck.apply_config()?;
-
+        deck.load_config()?;
         Ok(deck)
     }
 
@@ -65,75 +69,94 @@ impl StreamDeck {
             match self.get_button_presses() {
                 Ok(buf) => match buf.iter().position(|&i| i == 1) {
                     Some(i) => return Ok(i as u8),
-                    None => continue,
+                    None => (),
                 },
                 Err(error) => {
                     eprintln!("Error reading input: {}", error);
                     self.device = wait_for_device()?;
-                    continue;
                 }
             };
         }
     }
 
-    pub fn execute_button_callback(&mut self, button_index: u8) -> Result<()> {
-        let page = &self.config.pages[self.current_page];
-        let button = page.find_button(button_index).unwrap();
+    pub fn execute_button_action(&mut self, button_index: u8) -> Result<()> {
+        let button = self.pages[self.current_page].buttons.get(&button_index);
+        if button.is_none() {
+            return Ok(());
+        }
 
-        match button.command[0].as_str() {
-            "page" => match button.command[1].as_str() {
-                "next" => {
-                    if self.current_page + 1 < self.config.pages.len() {
-                        self.current_page += 1
-                    }
-                    self.apply_config()?;
+        match button.unwrap().action {
+            Action::PageNext => {
+                if self.current_page + 1 < self.pages.len() {
+                    self.current_page += 1
                 }
-                "prev" => {
-                    if self.current_page > 0 {
-                        self.current_page -= 1
-                    }
-                    self.apply_config()?;
-                }
-                _ => {}
-            },
-            "reload" => {
-                self.config = load_config(&self.config_path)?;
-                self.current_page = 0;
-                self.apply_config()?;
+                self.draw_current_page()?;
             }
-            _ => {
-                let button = button.clone();
-                thread::spawn(move || {
-                    let mut command = Command::new(&button.command[0]);
-                    command.args(&button.command[1..]);
-                    if let Some(work_dir) = &button.work_dir {
-                        command.current_dir(work_dir);
+            Action::PagePrev => {
+                if self.current_page > 0 {
+                    self.current_page -= 1
+                }
+                self.draw_current_page()?;
+            }
+            Action::Reload => {
+                self.load_config()?;
+            }
+            Action::Command(ref arr) => {
+                let mut command = Command::new(&arr[0]);
+                command.args(&arr[1..]);
+                thread::spawn(move || match command.spawn() {
+                    Ok(mut child) => {
+                        let _ = child.wait();
                     }
-                    match command.spawn() {
-                        Ok(mut child) => {
-                            let _ = child.wait();
-                        }
-                        Err(err) => {
-                            eprintln!("{}", err);
-                        }
+                    Err(err) => {
+                        eprintln!("{}", err);
                     }
                 });
             }
         }
+        Ok(())
+    }
+
+    fn load_config(&mut self) -> Result<()> {
+        let file = File::open(&self.config_path).context("can't open config file")?;
+        let config: Config = yaml_serde::from_reader(file).context("can't parse config file")?;
+
+        self.set_brightness(config.brightness)?;
+        self.current_page = 0;
+        self.pages = vec![];
+        for config_page in config.pages {
+            let mut page = Page {
+                buttons: HashMap::new(),
+            };
+            for config_button in config_page.buttons {
+                let action = match config_button.command[0].as_str() {
+                    "page_prev" => Action::PagePrev,
+                    "page_next" => Action::PageNext,
+                    "reload" => Action::Reload,
+                    _ => Action::Command(config_button.command),
+                };
+                page.buttons.insert(
+                    config_button.index,
+                    Button {
+                        image_path: config_button.image_path,
+                        action,
+                    },
+                );
+            }
+            self.pages.push(page);
+        }
+        self.draw_current_page()?;
 
         Ok(())
     }
 
-    fn apply_config(&self) -> Result<()> {
+    fn draw_current_page(&self) -> Result<()> {
         self.reset().context("reset streamdeck")?;
-        self.set_brightness().context("set brightness")?;
 
-        for button in self.config.pages[self.current_page].buttons.iter() {
-            if let Some(image_path) = &button.image_path {
-                let data =
-                    fs::read(image_path).context(format!("can't open image: {}", image_path))?;
-                self.set_button_image(button.index, &data)?;
-            }
+        for (index, button) in self.pages[self.current_page].buttons.iter() {
+            let data = fs::read(&button.image_path)
+                .context(format!("can't open image: {}", &button.image_path))?;
+            self.set_button_image(*index, &data)?;
         }
 
         Ok(())
@@ -145,8 +168,8 @@ impl StreamDeck {
         Ok(self.device.send_feature_report(&data)?)
     }
 
-    fn set_brightness(&self) -> Result<()> {
-        let mut data = vec![3, 8, self.config.brightness];
+    fn set_brightness(&self, brightness: u8) -> Result<()> {
+        let mut data = vec![3, 8, brightness];
         data.extend(vec![0; 29]);
         Ok(self.device.send_feature_report(&data)?)
     }
@@ -206,15 +229,6 @@ fn wait_for_device() -> Result<HidDevice> {
                 eprintln!("{}", error);
                 sleep(Duration::from_secs(3));
             }
-        }
+        };
     }
-}
-
-fn load_config(path: &str) -> Result<Config> {
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .open(path)
-        .context("can't open config file")?;
-    let config: Config = serde_yml::from_reader(file).context("can't parse config file")?;
-    Ok(config)
 }

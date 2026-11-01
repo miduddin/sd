@@ -16,7 +16,7 @@ pages:
       - index: 3
         image_path: /home/users/icons/next.jpg
         # Special command to set buttons to next page.
-        command: [page, next]
+        command: [page_next]
       - index: 7
         image_path: /home/users/icons/reload.jpg
         # Special command to reload config file.
@@ -24,7 +24,7 @@ pages:
   - buttons:
       - index: 0
         image_path: /home/users/icons/prev.jpg
-        command: [page, prev]
+        command: [page_prev]
       - index: 6
         image_path: /home/users/icons/someprogram.jpg
         command: [/usr/bin/someprogram]

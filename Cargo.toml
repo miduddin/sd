@@ -7,4 +7,4 @@ edition = "2024"
 anyhow = "*"
 hidapi = "*"
 serde = { version = "*", features = ["derive"] }
-serde_yml = "*"
+yaml_serde = "*"
