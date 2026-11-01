@@ -1,10 +1,5 @@
-# sd
+Only support Stream Deck Mk.2 (since I only have this one).
 
-A lightweight Stream Deck MK.2 app for linux that just barely works.
-
-What this app can do:
-
-* Set button image.
-* Set the command that will be executed when a button is pressed.
-
-That's it!
+```sh
+sd /path/to/config.yaml # see included config.yaml as an example.
+```
