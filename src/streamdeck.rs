@@ -9,7 +9,6 @@ use std::process::Command;
 use std::thread;
 use std::thread::sleep;
 use std::time::Duration;
-use std::u64;
 
 pub struct StreamDeck {
     device: HidDevice,
